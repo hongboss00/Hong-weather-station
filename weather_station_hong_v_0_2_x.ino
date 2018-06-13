@@ -166,9 +166,11 @@ void drawFrame1() {
 	String minute = String(minute_i);
 	String second = String(second_i);
 	if (hour_i > 12) {
+		if (hour_i >= 12) {
+			M = "PM";
+		}
 		hour_i -= 12;
 		hour = String(hour_i);
-		M = "PM";
 	}
 	if (hour_i < 10) {
 		hour = "0" + hour;
@@ -187,6 +189,7 @@ void drawFrame1() {
 	display.setFontScale2x2(false);
 	display.drawString(99 , 20 , M);
 	display.drawString(99 , 30 , second);
+	display.drawString(20, 50, String(millis()));
 	display.display();
 }
 
