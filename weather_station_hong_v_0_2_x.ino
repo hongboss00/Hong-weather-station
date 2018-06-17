@@ -41,12 +41,12 @@ void drawFrame6(int, int);
 char pass[] = "";
 
 // stop watch
-long previous = 0;
-long current = 0;
 int sec_f = 0;
 int min_f = 0;
 int hour_f = 0;
 bool ready = true;
+long MillisUpdate;
+long time_f;
 String Second;
 String Minute;
 String Hour;
@@ -229,11 +229,13 @@ void drawFrame5(int x, int y) {
 
 void drawFrame6(int x, int y) {
 	display.clear();
-		stop_watch();
-		buttonaction(1);
+	stop_watch();
+	buttonaction(1);
+
 	Second = String(sec_f);
 	Minute = String(min_f);
 	Hour = String(hour_f);
+
 	if (sec_f < 10) {
 		Second = "0" + Second;
 	}
@@ -418,32 +420,23 @@ void Wifiselector() {
 }
 
 void stop_watch() {
+
 	if (BTN[1].stopwatch_state == 0) {
 		sec_f = 0;
 		min_f = 0;
 		hour_f = 0;
-		previous = 0;
-		current = 0;
 		ready = true;
 	}
-	if (BTN[1].stopwatch_state == 1 && ready) {
-		previous = millis();
-		ready = false;
-	}
 	if (BTN[1].stopwatch_state == 1) {
-		current = millis();
-	}
-	int t = current - previous;
-	if (t > 1000) {
-		sec_f += 1;
-		previous = current;
-	}
-	if (sec_f >= 60) {
-		min_f += 1;
-		sec_f = 0;
-	}
-	if (min_f >= 60) {
-		hour_f += 1;
-		min_f = 0;
+		if (ready) {
+			MillisUpdate = millis();
+			ready = false;
+		}
+
+		time_f = round((millis() - MillisUpdate) / 1000 + 86400L) % 86400L;
+
+		sec_f = time_f % 60;
+		min_f = (time_f % 3600) / 60;
+		hour_f = ((time_f % 86400L) / 3600) % 24;
 	}
 }
