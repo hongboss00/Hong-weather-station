@@ -406,6 +406,8 @@ void Wifiselector() {
 		selecting_number = BTN[1].count - 1;
 		BTN[1].count = 1;
 		BTN[0].count = 1;
+		BTN[1].stopwatch_state = 0;
+		BTN[1].lastbuttonstate = 1;
 		selecting = true;
 	}
 	buttonaction(0);
