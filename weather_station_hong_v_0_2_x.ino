@@ -8,6 +8,8 @@
 #include <JsonListener.h>
 
 #define I2C 0x3c
+#define SDA D6
+#define SCL D7
 #define BTN_1 D5
 #define BTN_2 D1
 
@@ -19,55 +21,41 @@ const String  WUNDERGRROUND_LANGUAGE = "EN";
 const boolean IS_METRIC = true;
 const boolean USE_PM = true;
 
-//
+//Timeclient
 const float UTC = 9;
 
-// Initialize the oled display for address 0x3c
+//Objects
 // 0x3D is the adafruit address....
-SSD1306 display(I2C, D6, D7);
+SSD1306 display(I2C, SDA, SCL);
 WundergroundClient wunderground(IS_METRIC);
 TimeClient timeclient(UTC);
 //Frames
-void drawFrame1();
-void drawFrame2();
-void drawFrame3();
-void drawFrame4();
-void drawFrame5();
-
-// this array keeps function pointers to all frames
-// frames are the single views that slide from right to left
-//void (*frameCallbacks[3])(int x, int y) = { drawFrame1, drawFrame4, drawFrame5};
-
-// on frame is currently displayed
+void drawFrame1(int,int);
+void drawFrame2(int,int);
+void drawFrame3(int,int);
+void drawFrame4(int,int);
+void drawFrame5(int,int);
+void drawFrame6(int, int);
 
 // your network SSID (name)
 char pass[] = "";
 
 // stop watch
-int counter = 0;
-int sec_F = 0;
-int min_F = 0;
-int hour_F = 0;
-int stopcount = 0;
-
+long previous = 0;
+long current = 0;
+int sec_f = 0;
+int min_f = 0;
+int hour_f = 0;
+bool ready = true;
+String Second;
+String Minute;
+String Hour;
 
 // flag changed in the ticker function every 10 minutes
 bool readyForWeatherUpdate = true;
 bool selecting = false;
-bool scanning = false;
-bool selected = false;
-//bool initial = true;
 
-int selecting_number = 0;
-
-int action = 1;
-int action_2 = 1;
-
-int buttonstate = 0;
-int lastbuttonstate = 1;
-
-int buttonstate_2 = 0;
-int lastbuttonstate_2 = 1;
+//SSID_LIST
 String SSID_list[6];
 char SSID0[100];
 char SSID1[100];
@@ -76,22 +64,30 @@ char SSID3[100];
 char SSID4[100];
 char SSID5[100];
 char* SSID_LIST[6] = {SSID0,SSID1,SSID2,SSID3,SSID4,SSID5 };
+int selecting_number = 0;
 
-//const char* moon_phase = "";
+//BTN struct
+struct BTN
+{
+	int buttonstate = 0;
+	int lastbuttonstate = 1;
+	int count = 1;
+	int stopwatch_state = 0;
+	bool selected = false;
+};
+
+struct BTN BTN[2];
+
 
 void setup() {
   delay(500);
 
-  Serial.begin(9600);
   pinMode(BTN_1, INPUT_PULLUP);
   pinMode(BTN_2, INPUT_PULLUP);
-  // initialize display
+  // initialize display and settings
   display.init();
   display.clear();
   display.flipScreenVertically();
-  // set the drawing functions
-
-  display.clear();
   display.display();
  
   delay(500);
@@ -108,11 +104,9 @@ void loop() {
 			updateData();
 		}
 	}
-	buttonaction(BTN_1);
-	buttonaction_2(BTN_2);
+	buttonaction(0);
 	display.clear();
 	currentFrame();
-	Serial.println(SSID_LIST[2]);
 }
 
 void updateData() {
@@ -121,27 +115,11 @@ void updateData() {
 	display.display();
 	wunderground.updateConditions(WUNDERGROUND_API_KEY, WUNDERGRROUND_LANGUAGE, WUNDERGROUND_COUNTRY, WUNDERGROUND_CITY);
 	wunderground.updateForecast(WUNDERGROUND_API_KEY, WUNDERGRROUND_LANGUAGE,WUNDERGROUND_COUNTRY, WUNDERGROUND_CITY);
-	//wunderground.updateAstronomy(WUNDERGROUND_API_KEY, WUNDERGRROUND_LANGUAGE, WUNDERGROUND_COUNTRY, WUNDERGROUND_CITY);
+	wunderground.updateAstronomy(WUNDERGROUND_API_KEY, WUNDERGRROUND_LANGUAGE, WUNDERGROUND_COUNTRY, WUNDERGROUND_CITY);
 	timeclient.updateTime();
 	delay(500);
 	WiFi.disconnect();
-	//String getMoon = wunderground.getMoonPhase();
-	//moon_phase = getIconOfMoon(getMoon);
 
-	/*if (getIconOfMoon(getMoon) == "Wan") {
-		if (getMoon.substring(7, 10) == "Gib") {
-			moon_phase = moon70_bits;
-		}
-		moon_phase = moon30_2_bits;
-	}
-	if (getIconOfMoon(getMoon) == "Wax") {
-		if (getMoon.substring(7, 10) == "Gib") {
-			moon_phase = moon70_2_bits;
-		}
-		moon_phase = moon30_bits;
-	}
-	
-	*/
 	readyForWeatherUpdate = false;
 	display.clear();
 	display.display();
@@ -153,10 +131,10 @@ void setReadyForWeatherUpdate() {
   readyForWeatherUpdate = true;
 }
 
-void drawFrame1() {
+void drawFrame1(int x, int y) {
 	display.clear();
 	display.setFontScale2x2(false);
-	display.drawString(22 , 10 , wunderground.getDate().substring(0, 11));
+	display.drawString(22 + x , 10+ y , wunderground.getDate().substring(0, 11));
 
 	int hour_i = atoi(timeclient.getHours().c_str());
 	int minute_i = atoi(timeclient.getMinutes().c_str());
@@ -165,12 +143,13 @@ void drawFrame1() {
 	String hour = String(hour_i);
 	String minute = String(minute_i);
 	String second = String(second_i);
-	if (hour_i > 12) {
-		if (hour_i >= 12) {
-			M = "PM";
+	if (hour_i >= 12) {
+		M = "PM";
+		if (hour_i > 12) {
+			hour_i -= 12;
+			hour = String(hour_i);
 		}
-		hour_i -= 12;
-		hour = String(hour_i);
+
 	}
 	if (hour_i < 10) {
 		hour = "0" + hour;
@@ -185,120 +164,96 @@ void drawFrame1() {
 	}
 
 	display.setFontScale2x2(true);
-	display.drawString(18 , 23 , hour + ":" + minute);
+	display.drawString(18+ x , 23+ y , hour + ":" + minute);
 	display.setFontScale2x2(false);
-	display.drawString(99 , 20 , M);
-	display.drawString(99 , 30 , second);
-	display.drawString(20, 50, String(millis()));
+	display.drawString(99+ x , 20+ y , M);
+	display.drawString(99+x , 30+ y , second);
 	display.display();
 }
 
 
 
-void drawFrame2() {
+void drawFrame2(int x, int y) {
 	display.clear();
 	display.setFontScale2x2(false);
-	display.drawString(65 , 0 , "Today");
-	display.drawXbm(0, 0, 60, 60, xbmtemp);
+	display.drawString(65+ x , 0+ y , "Today");
+	display.drawXbm(0+ x, 0+ y, 60, 60, xbmtemp);
 	display.setFontScale2x2(true);
 	String temp = wunderground.getCurrentTemp();
-	display.drawString(64 , 14 , temp + "C");
-	display.drawString(64 , 32 , wunderground.getHumidity());
+	display.drawString(64+ x , 14+ y , temp + "C");
+	display.drawString(64+ x , 32+ y , wunderground.getHumidity());
 	display.display();
 }
 
-void drawFrame3() {
+void drawFrame3(int x, int y) {
 	display.clear();
 	display.setFontScale2x2(false);
-	display.drawString(70, 0, "Today");
-	display.drawXbm(10, 0, 50, 50, getIconFromString(wunderground.getTodayIcon()));
+	display.drawString(70 +x, 0+ y, "Today");
+	display.drawXbm(10+ x, 0+ y, 50, 50, getIconFromString(wunderground.getTodayIcon()));
 	display.setFontScale2x2(true);
-	display.drawString(69, 14, wunderground.getCurrentTemp() + "C");
+	display.drawString(69+ x, 14+ y, wunderground.getCurrentTemp() + "C");
 	display.setFontScale2x2(false);
 	String high = wunderground.getForecastHighTemp(0);
 	String low = wunderground.getForecastLowTemp(0);
-	display.drawString(71, 38, high + "/" + low);
+	display.drawString(71+ x, 38+ y, high + "/" + low);
 	display.display();
 }
 
-void drawFrame4() {
+void drawFrame4(int x, int y) {
 	display.clear();
 	display.setFontScale2x2(false);
-	display.drawString(65, 0, "Tomorrow");
-	display.drawXbm(10, 0, 50, 50, getIconFromString(wunderground.getForecastIcon(2)));
+	display.drawString(65+ x, 0+ y, "Tomorrow");
+	display.drawXbm(10+ x, 0+ y, 50, 50, getIconFromString(wunderground.getForecastIcon(2)));
 	display.setFontScale2x2(true);
 	String high = wunderground.getForecastHighTemp(2);
 	String low = wunderground.getForecastLowTemp(2);
-	display.drawString(71, 14, high + "C");
-	display.drawString(71, 32, low + "C");
+	display.drawString(71+ x, 14+ y, high + "C");
+	display.drawString(71+ x, 32+ y, low + "C");
 	display.display();
 }
 
-void drawFrame5() {
+void drawFrame5(int x, int y) {
 	display.clear();
-
-	String sec_s = String(sec_F);
-	String min_s = String(min_F);
-	String hour_s = String(hour_F);
-
-	if (stopcount == 1) {
-		sec_F = millis() / (1000 - 60 * counter);
-
-
-		if (sec_F == 60) {
-			min_F++;
-			counter++;
-			sec_F = 0;
-		}
-
-		if (min_F == 60) {
-			hour_F++;
-			min_F = 0;
-		}
-
-		if (sec_F < 10) {
-			sec_s = "0" + sec_s;
-		}
-
-		if (min_F < 10) {
-			min_s = "0" + min_s;
-		}
-
-		if (hour_F < 10) {
-			hour_s = "0" + hour_s;
-		}
-
-		display.setFontScale2x2(false);
-		display.drawString(22, 15, "STOP_WATCH");
-		display.setFontScale2x2(true);
-		display.drawString(18, 28, hour_s + ":" + min_s);
-		display.setFontScale2x2(false);
-		display.drawString(99, 35, sec_s);
-	}
-	display.display();
-
-
-
-}
-
-
-	/*void drawFrame5() {
 	display.setFontScale2x2(false);
-	display.drawString(65 , 10, "Moon");
-	display.drawXbm(0, 0, 50, 50, moon_phase);
+	display.drawString(65 + x, 0 + y, "Moon");
+	display.drawXbm(5 + x, 0 + y, 50, 50, getIconOfMoon(wunderground.getMoonPhase()));
 	display.setFontScale2x2(true);
-	display.drawString(64 , 24, wunderground.getMoonPctIlum() + "%");
+	display.drawString(64 + x, 15 + y, wunderground.getMoonPctIlum() + "%");
 	display.setFontScale2x2(false);
 	String rise = wunderground.getMoonriseTime();
 	String set = wunderground.getMoonsetTime();
-	display.drawString(66 , 38 + y, rise);
-	display.drawString(66 , 48 + y, set);
+	display.drawString(66 + x, 33 + y, rise);
+	display.drawString(66 + x, 43 + y, set);
+	display.display();
+}
 
+void drawFrame6(int x, int y) {
+	display.clear();
+		stop_watch();
+		buttonaction(1);
+	Second = String(sec_f);
+	Minute = String(min_f);
+	Hour = String(hour_f);
+	if (sec_f < 10) {
+		Second = "0" + Second;
 	}
-	*/
+	if (min_f < 10) {
+		Minute = "0" + Minute;
+	}
+	if (hour_f < 10) {
+		Hour = "0" + Hour;
+	}
+	display.setFontScale2x2(false);
+	display.drawString(22+ x, 15+ y, "STOP_WATCH");
+	display.setFontScale2x2(true);
+	display.drawString(18+ x, 28+ y, Hour + ":" + Minute);
+	display.setFontScale2x2(false);
+	display.drawString(99+ x, 35+ y, Second);
+	display.display();
 
+}
 
-
+	
 const char* getIconFromString(String icon) {
   //"clear-day, clear-night, rain, snow, sleet, wind, fog, cloudy, partly-cloudy-day, or partly-cloudy-night"
   if (icon == "B") {
@@ -325,39 +280,15 @@ const char* getIconFromString(String icon) {
   return cloudy_bits;
 }
 
-const char* getIconOfMoon(String icon_2) {
-	String icon = icon_2.substring(0, 3);
-	if (icon == "New") {
-		return moon0_bits;
-	}else if (icon == "Wax") {
-		return "Waxing";
-	}else if (icon == "Wan") {
-		return "Waning";
-	}else if (icon == "Fir") {
-		return moon50_bits;
-	}
-	else if (icon == "Thi") {
-		return moon50_2_bits;
-	}else if (icon == "Ful") {
-		return moon100_bits;
-	}
-}
-/*const char* getIconOfMoon(String icon) {
+const char* getIconOfMoon(String icon) {
 	if (icon == "New") {
 		return moon0_bits;
 	}
 	else if (icon == "Waxing Crescent") {
-		if (atoi(wunderground.getMoonPctIlum().c_str()) >= 30) {
 			return moon30_bits;
-		}
-		return moon10_bits;
 	}
 	else if (icon == "Waning Crescent") {
-		if (atoi(wunderground.getMoonPctIlum().c_str()) >= 30) {
 			return moon30_2_bits;
-		}
-		return moon10_2_bits;
-		
 	}
 	else if (icon == "First Quater") {
 		return moon50_bits;
@@ -376,7 +307,7 @@ const char* getIconOfMoon(String icon_2) {
 	}
 
 }
-*/
+
 
 void wificonnect() {
 	Wifiscan();
@@ -411,57 +342,46 @@ void drawSpinner(int count, int active) {
   }
 }
 
-void buttonaction(int pin) {
-	buttonstate = digitalRead(pin);
-	if (action > 5) {
-		action = 1;
+//BTN[0]  --> BTN_1 D5 -->stop_watch, list ->
+//BTN[1]  --> BTN_2 D1 -->selecting
+void buttonaction(int btn) {
+		BTN[0].buttonstate = digitalRead(BTN_1);
+		BTN[1].buttonstate = digitalRead(BTN_2);
+
+	if (BTN[0].count > 6) {
+		BTN[0].count = 1;
 	}
 
-	if (buttonstate != lastbuttonstate) {
-		if (buttonstate == 0) {
+	if (BTN[1].count > 6) {
+		BTN[1].count = 1;
+	}
 
-			action++;
-			selected = true;
+	if (BTN[btn].stopwatch_state > 2) {
+		BTN[btn].stopwatch_state = 0;
+	}
+	if (BTN[btn].buttonstate != BTN[btn].lastbuttonstate) {
+		if (BTN[btn].buttonstate == 0) {
+			BTN[btn].count++;
+			BTN[btn].selected = true;
+			BTN[btn].stopwatch_state++;
 		}
-		
 	}
-	lastbuttonstate = buttonstate;
-
-}
-
-void buttonaction_2(int pin) {
-	buttonstate_2 = digitalRead(pin);
-	if (action_2 > 6) {
-		action_2 = 1;
-	}
-	if (stopcount > 3) {
-		stopcount = 0;
-	}
-
-	if (buttonstate_2 != lastbuttonstate_2) {
-		if (buttonstate_2 == 0) {
-
-			action_2++;
-			stopcount++;
-		}
-
-	}
-	lastbuttonstate_2 = buttonstate_2;
-
+	BTN[btn].lastbuttonstate = BTN[btn].buttonstate;
 }
 
 void currentFrame() {
-	switch (action) {
-	case 1: drawFrame1();
+	switch (BTN[0].count) {
+	case 1: drawFrame1(0,0);
 		break;
-	case 2: drawFrame2();
+	case 2: drawFrame2(0,0);
 		break;
-	case 3: drawFrame3();
+	case 3: drawFrame3(0,0);
 		break;
-	case 4: drawFrame4();
+	case 4: drawFrame4(0,0);
 		break;
-	case 5: drawFrame5();
+	case 5: drawFrame5(0,0);
 		break;
+	case 6: drawFrame6(0, -5);
 	}
 
 }
@@ -480,20 +400,50 @@ void Wifiscan() {
 }
 
 void Wifiselector() {
-	if (selected) {
-		selecting_number = action_2 - 1;
-		action_2 = 1;
-		action = 1;
+	if (BTN[0].selected) {
+		selecting_number = BTN[1].count - 1;
+		BTN[1].count = 1;
+		BTN[0].count = 1;
 		selecting = true;
-
 	}
-	buttonaction_2(BTN_2);
-	buttonaction(BTN_1);
+	buttonaction(0);
+	buttonaction(1);
 	display.clear();
 	for (int i = 0; i < 6; i++) {
 		display.drawString(18, 10 * i, SSID_list[i]);
 	}
-	display.drawString(0, 10 * (action_2 - 1), "->");
+	display.drawString(0, 10 * (BTN[1].count - 1), "->");
 	display.display();
 
+}
+
+void stop_watch() {
+	if (BTN[1].stopwatch_state == 0) {
+		sec_f = 0;
+		min_f = 0;
+		hour_f = 0;
+		previous = 0;
+		current = 0;
+		ready = true;
+	}
+	if (BTN[1].stopwatch_state == 1 && ready) {
+		previous = millis();
+		ready = false;
+	}
+	if (BTN[1].stopwatch_state == 1) {
+		current = millis();
+	}
+	int t = current - previous;
+	if (t > 1000) {
+		sec_f += 1;
+		previous = current;
+	}
+	if (sec_f >= 60) {
+		min_f += 1;
+		sec_f = 0;
+	}
+	if (min_f >= 60) {
+		hour_f += 1;
+		min_f = 0;
+	}
 }
