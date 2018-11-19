@@ -111,7 +111,7 @@ void loop() {
 
 void updateData() {
 	display.clear();
-	display.drawString(10,10,"Information...");
+	display.drawString(10,10,"Get information");
 	display.display();
 	wunderground.updateConditions(WUNDERGROUND_API_KEY, WUNDERGRROUND_LANGUAGE, WUNDERGROUND_COUNTRY, WUNDERGROUND_CITY);
 	wunderground.updateForecast(WUNDERGROUND_API_KEY, WUNDERGRROUND_LANGUAGE,WUNDERGROUND_COUNTRY, WUNDERGROUND_CITY);
